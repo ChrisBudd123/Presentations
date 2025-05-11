@@ -1,0 +1,1002 @@
+\documentclass{beamer}
+\usetheme{AnnArbor}
+\beamertemplatenavigationsymbolsempty
+\usepackage[normalem]{ulem}
+\usepackage{mathtools}
+\usepackage[utf8]{inputenc}
+\usepackage{listings}
+\usepackage{color}
+\usepackage{movie15}
+\usepackage{svg}
+\usepackage{bm}
+%%%
+
+\usepackage{xcolor}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usetikzlibrary{positioning}
+\usetikzlibrary{calc}
+\usetikzlibrary{shapes,arrows}
+\usepackage{pgfplots}
+\pgfplotsset{width=7cm,compat=1.13}
+\usepgfplotslibrary{colorbrewer}
+\usepackage{subfig}
+%\usepackage{media9}
+\DeclareMathOperator*{\argminA}{arg\,min}
+
+%%%
+
+
+\lstdefinelanguage[firedrake]{python}[]{python}{%
+  % FEniCS language goes here.
+  emph={[2]UnitCubedSphereMesh,FunctionSpace,TensorFunctionSpace,Function,split,Constant,TestFunctions,solve},
+  % UFL goes here.
+  emph={grad,div,dx,ds,dS,dot,inner,sqrt,cos,sin,Identity,outer,det}
+}
+
+\definecolor{Blue}{rgb}{0.00,0.00,1.00}
+\definecolor{Red}{rgb}{1.00,0.00,0.00}
+\definecolor{DarkGreen}{rgb}{0.00,0.55,0.00}
+\definecolor{Purple}{rgb}{0.5,0.0,0.5}
+\definecolor{Bittersweet}{rgb}{1.0,0.44,0.37}
+\lstset{%
+  language=python,
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\bfseries\color{Purple},
+  commentstyle=\itshape\color{DarkGreen},
+  stringstyle=\color{Red},
+  emphstyle={[2]\color{Blue}},
+  emphstyle=\color{Bittersweet},
+  showspaces=false,
+  showtabs=false,
+  columns=fixed,
+  frame=none,
+  numberstyle=\tiny,
+  breaklines=true,
+  breakatwhitespace=true,
+  showstringspaces=false,
+  escapeinside={(*@}{@*)},
+  xrightmargin=0cm,
+  xleftmargin=0cm,
+}
+
+\newcommand{\ints}[1]{\int_{#1}}
+\newcommand{\dx}{\,\mathrm{d} x}
+\newcommand{\ds}{\,\mathrm{d} s}
+\newcommand{\dS}{\,\mathrm{d} S}
+\newcommand{\pp}[2]{\frac{\partial #1}{\partial #2}}
+\newcommand{\Hdiv}{H(\operatorname{div})}
+\DeclareMathOperator{\Tr}{Tr}
+\DeclareMathOperator{\sech}{sech}
+
+%\renewcommand{\vec}{\mathbf}
+
+\title[PINNS and Things]{PINNS and Things}
+ \author[Chris Budd]{  {\bf Chris Budd\inst{1}}  }
+\institute[Bath]{{\inst{1} University of Bath   }}
+\date{Samba Seminar, March 2025}
+
+\begin{document}
+
+\setbeamertemplate{caption}{\insertcaption}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+
+\begin{frame}{Some papers to look at}
+
+\begin{itemize}
+\item Grossman et. al. {\em Can PINNS beat the FE method?}
+\item Shin et. al. {\em On the convergence of PINNS for linear elliptic and parabolic PDEs}
+\item E and Yu {\em The Deep Ritz Method}
+\item Appella, B, et. al. {\em Equidistribution based training of FKS and ReLU Neural Networks}
+\item  Stuart et. al. {\em Fourier Neural Operator for PDEs}
+\item Kovachi et. al. {\em Operator learning: algorithms and analysis}
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Motivation: Solving PDEs}
+    
+
+Seek to solve PDE problems of the form
+
+\vspace{0.2in}
+
+{\color{red} $${\mathbf u}_t =  F({\mathbf x}, u, \nabla u, \nabla^2 u) \quad \mbox{with BC}$$}
+
+eg.
+
+{\color{blue} 
+$$-\Delta u = f(x), \quad i u_t + \Delta u + u|u|^2 = 0, \quad u_t = \Delta u + f(x,u).$$
+}
+
+\end{frame}
+
+\begin{frame}{Finite Element Methodology}
+
+
+Express $u(x,t)$ as a Galerkin approximation:
+
+$${\color{blue} u(t,x) \approx U(t,x) =  \sum_{i=0}^N  U_i(t) \; \phi_i(x)}$$
+
+with $\phi_i(x)$  {\color{red} {\bf Not} globally differentiable {\em locally supported, piece-wise polynomial spline functions}}  
+
+
+\begin{itemize}
+
+\item Require $U$ to satisfy a {\em weak form} of the PDE
+\item Have guaranteed error estimates of the form 
+$$\|u - U \|_{H^1} < C(u) N^{-\alpha}$$
+\item Can reduce $C(u)$ and increase $\alpha$ using an adaptive approach. 
+\item Awkward in higher dimensions!
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Basic linear spline on free knots $k_i$}
+
+ \begin{figure}
+    \centering
+    \includegraphics[scale = 0.5]{phi.pdf}
+    \end{figure}
+
+\end{frame}
+\begin{frame}{Meshes}
+Traditional PDE computations using {\color{red} Finite Element Methods} use a {\color{blue}computational mesh} $\tau$ comprising mesh points and a mesh topology with $\phi_i(x)$ defined over the mesh
+  \begin{figure}
+    \includegraphics[height=0.6\textheight]{T_mesh.png}
+  \end{figure}
+
+\end{frame}
+
+\begin{frame}{Mesh choice}
+    
+
+{\color{red} Accuracy of the computation depends crucially on the choice and shape of the mesh} 
+
+\vspace{0.2in}
+
+Mesh needs to be 
+
+\vspace{0.1in}
+
+\begin{itemize}
+\item {\color{blue} Fine Enough} to capture (evolving) small scales/singular behaviour 
+\item {\color{blue} Coarse Enough} to allow practical computations
+\item Able to resolve local geometry eg. re-entrant corners in non-convex domains
+\item Can inforce structure preserving elements eg. conservation laws.
+\end{itemize}
+
+{\color{red} Often hard to find a good mesh!}
+
+\end{frame}
+
+
+
+\begin{frame}{PINNS}
+
+Physics Informed Neural Networks for solving PDEs: advertised as {\color{blue} "Mesh free methods"}.
+
+Use a Deep Neural Net of width $W$ and depth $L$ to give a {\color{red} functional approximation} to $u({\mathbf x})$ with {\color {blue} input} $x$.
+
+{\color{purple} $$y({\mathbf x}) = DNN({\mathbf x})$$}
+
+\begin{figure}
+    \centering
+    \includegraphics[scale = 0.18]{nn_2in.png}
+    \label{fig:dnn_example}
+\end{figure}
+
+$y({\mathbf x})$ is constructed via a combination of linear transformations and nonlinear/semi-linear activation functions.
+
+\end{frame}
+
+\begin{frame}
+
+Example: {\color{red} Shallow 1D neural net}
+
+$$y({\mathbf x}) = \sum_{i = 0}^{W-1} c_i \sigma (a_i {\mathbf x} + {\mathbf b}_i)$$
+
+Often take 
+
+$$\sigma(z) = \mbox{ReLU}(z) \equiv z_+, \quad \mbox{or} \quad \sigma(z) = \tanh(z)$$
+
+
+\end{frame}
+
+
+\begin{frame}{I: Operation of a 'traditional' PINN}
+    
+\begin{itemize}
+
+\item Assume that $y({\mathbf x})$ has strong regularity eg. $C^2$ {\color{red} so not ReLU}
+\item Differentiate $y({\mathbf x})$ {\color{blue} exactly} using the chain rule
+\item Evaluate the {\color{red} PDE residual} at {\color{blue} collocation points} ${\mathbf X}_i,$ :chosen to be uniformly spaced, or {\color{blue} random}
+\item Train the neural net to minimise a {\bf loss function} $L$  combining the PDE residual and boundary and initial conditions
+
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Eg 1. Solution of regular two-point BVPs by PINNs}
+
+
+\vspace{1mm}
+
+Consider the two-point BVP with Dirichlet boundary conditions:
+
+{\color{red} $$-u_{xx} = f(x,u,u_x), \;  x \in [0,1] \quad u(0) = a, \, u(1) = b.$$}
+
+Define output of the PINN by $y(x)$ and residual {\color{blue} $r(x) := y_{xx} + f(x,y,y_x)$}. \\
+The PINN is trained by minimising the loss function
+
+$$L = \frac{1}{N_{r}} \sum_{i}^{N_{r}} |r(X_{i}^{r})|^{2}  +  \frac{1}{2} \left(|y(0) - a|^{2} + |y(1) - b|^{2}\right), $$
+
+where $\{X_{i}^{r}\}_{i}^{N_{r}}$ are the {\color{blue} collocation points} placed in $(0,1)$.
+
+\end{frame}
+
+\begin{frame}{Numerical results for:  $-u'' = \pi^2 sin(\pi x)$.}
+
+\begin{figure}
+   \centering
+   \includegraphics[scale = 0.35]{PINN_Poisson/LossError.png}
+    \caption{Residual based Loss and $L^{2}$ error of the PINN solution for $N_{r} = 100$}
+    \label{fig:PINN_loss_err}
+\end{figure}
+
+
+\end{frame}
+
+
+
+
+
+\begin{frame}{Eg 2. Singular Reaction-Diffusion Equation}
+
+Solve $-\varepsilon^{2}u_{xx} + u = 1- x \; \text{on} \; [0,1] \quad  u(0) = u(1) = 0$\\
+
+\vspace{2mm}
+
+
+\begin{figure}
+    \centering
+    \includegraphics[scale = 0.2]{PINN_Poisson/reaction_diffusion_uniform_loss.png}
+    \includegraphics[scale = 0.2]{PINN_Poisson/reaction_diffusion_equidistributed_loss.png}\\
+    \includegraphics[scale = 0.2]{PINN_Poisson/reaction_diffusion_uniform_N_101.png}
+    \includegraphics[scale = 0.2]{PINN_Poisson/reaction_diffusion_equidistributed_N_101.png}
+     \caption{PINN (tanh) trained for 20000 epochs, $N_{r} = 101$, Adam optimizer with $lr = 1e-3$. (left) Uniform collocation points (right) Adapted collocation points {\bf much faster training}}
+    \label{fig:reaction_diffusion  }
+\end{figure}
+
+ Result depends significantly on the choice of the collocation points!
+\end{frame}
+
+
+\begin{frame}{Eg 3. Bad news: Convection-dominated equation}
+
+{\color{red} PINNs fail to train} when the solution of the BVP exhibits singular and convective behaviour [Krishnapriyan, Aditi et. al., (2021)]:
+
+$$-\varepsilon u_{xx} + \left(1-\frac{\varepsilon}{2}\right)u_{x} + \frac{1}{4}\left(1-\frac{1}{4}\varepsilon\right)u =  e^{-x/4} \; \text{on} \; [0,1] \quad  u(0) = u(1) = 0$$
+
+$$u(x) = exp^{\frac{-x}{4}}\left( x - \frac{exp^{-\frac{1-x}{\varepsilon}} - exp^{-\frac{1}{\varepsilon}}}{1 - exp^{-\frac{1}{\varepsilon}}}\right) $$
+
+
+\begin{figure}
+    \centering
+    \includegraphics[scale = 0.24]{PINN_Poisson/convection_failing_loss.png}
+     \includegraphics[scale = 0.24]{PINN_Poisson/convection_failing.png}
+    \label{fig:convection_loss}
+\end{figure}
+
+
+
+\end{frame}
+
+
+%\begin{frame}{Numerical results: Convection Equation}
+
+%\begin{figure}
+ %   \centering
+  %  \includegraphics[scale = 0.25]{PINN_Poisson/convection_uniform_N_301.png}
+  %  \includegraphics[scale = 0.25]{PINN_Poisson/convection_equidistributed_N_301.png}
+  %  \caption{PINN trained for 50000 epochs with Adam optimizer ($lr = 1e-3$). \\
+ %   Left: uniform $N = 300$  $|$ Right: equidistributed {\color{red}$N = 150$}}
+ %   \label{fig:convection}
+%\end{figure}
+
+    
+%\end{frame}
+
+
+%\begin{frame}{Numerical results: $u(x) = sin(\pi x)$}
+
+%\begin{figure}
+%    \centering
+ %   \includegraphics[scale = 0.3]{PINN_Poisson/PINN_sol.png}
+ %   \includegraphics[scale = 0.3]{PINN_Poisson/convRate.png}
+ %   \caption{(Left) PINN with depth $L=2$  and width $W = 30$. 
+  %  $N_{r} = 100$ uniformly distributed quadrature points, 
+  %  activation function: {\color{blue} tanh},  optimizer: Adam with $lr = 1e-3$ 
+  %  (Right) Convergence rate for 1st order interpolant}
+%\end{figure}
+
+%\end{frame}
+
+\begin{frame} {II Operation of a 'variational' PINN such as a Deep Ritz Method (DRM)  [Weinan E et. al.]}
+
+\begin{itemize}
+    \item Assume that $y({\mathbf x})$ has weaker regularity eg. $H^1$ {\color{red} So ReLU is OK}
+\item Differentiate $y({\mathbf x})$ {\color{blue} exactly} using the chain rule
+\item Construct an appropriate {\color{red} weak form of the PDE} (typically involving an integral)
+
+\item Evaluate the weak form by using quadrature at {\color{blue} quadrature points} ${\mathbf X}_i$ (chosen to be uniformly spaced, or random)
+\item Train the neural net to minimise a loss function combining the weak form and boundary and initial conditions
+
+\end{itemize}
+
+\end{frame}
+
+\begin{frame} {Example: Poisson equation in 2D} 
+
+
+{\color{blue} DRM method works well for small DOF}
+
+{\color{purple} dG Finite Eelement Method is {\bf much} better for more DOF}
+
+
+\begin{figure}
+  \includegraphics[height=0.55\textheight]{conv_2.png}
+ \end{figure}
+
+{\color{red} This convergence pattern is seen in many other examples}
+
+\end{frame}
+
+
+\begin{frame}{General questions for consideration}
+  
+
+
+\vspace{0.1in}
+
+\begin{enumerate}
+
+\item When do and don't PINNs work, and why?
+\item How do these answers depend on (i) the problem (ii) choice of activation fiunction, optiisation, collocation points etc
+\item Can we develop a useful convergence theory for a PINN
+using tools from approximations theory, bifurcation theory, numerical analysis etc.
+\item How does a PINN compare to a finite element method?
+\end{enumerate}
+  
+\end{frame}
+
+
+\begin{frame}{Comparing a PINN to an (adaptive) finite element method}
+
+If $\sigma(z) = ReLU(z)$  then
+
+$$y({\mathbf x}) = \sum_{i=0}^{W-1} c_i (a_i {\mathbf x} + {\mathbf b}_i)_+$$
+
+In 1-dimension this is a {\bf piece-wise linear function} with $N$ {\bf free knots} at 
+$$k_i = -b_i/a_i.$$
+
+
+{\color{blue} {\bf [deVore]} Any 1D ReLU network of width $W$ and depth $L$ is formally equivalent to a piecewise linear free knot spline (FKS) approximationn with $N \ll W^L$ free knots $k_i$, where 
+$$y(x) = \sum_{i=0}^N w_i \phi_i(x - k_i).$$ }
+
+
+\vspace{0.1in}
+
+Similar results  but {\bf MUCH} more complex in higher dimensions. 
+
+
+\end{frame}
+
+\begin{frame}{Expressivity of a PINN}
+
+
+SO .. in  principle a ReLU  network has the {\color{blue} same expressivity as an adaptive Finite Element Method} and should deliver the same error estimates if correctly trained.
+
+\vspace{0.1in}
+
+
+Compare with a traditional linear spline (used in FE) which is often a {\bf piecewise linear Galerkin approximation to a function with a fixed mesh.} Good convergence, but often much slow than an adaptive FE method and hence a well trained PINN
+
+\vspace{0.1in}
+
+{\color{red} BUT do we ever see this in practice?} 
+
+\end{frame}
+
+
+\begin{frame}{Results by Grossman et. el.  1 } 
+
+ \begin{figure}
+  \includegraphics[height=1\textheight]{adv.pdf}
+  \end{figure}
+\end{frame}
+
+\begin{frame}{Results by Grossman et. el.   2} 
+
+ \begin{figure}
+  \includegraphics[height=0.75\textheight]{ca1.pdf}
+  \end{figure}
+\end{frame}
+
+
+\begin{frame}
+
+\noindent {\bf FE: linear}
+
+\begin{itemize}
+
+\item Limited  expressivity, reduced accuracy
+\item Adaptive only with effort
+\item Not equivariant
+\item Need a complex mesh data structure
+\item Convex with  guarantees of uniqueness for many problems (and direct calculation using linear algebra)
+\item Work on saddle-point problems (eg. most problems)
+\item Good (a-priori and a-posteriori) guaranteed error bounds : 
+
+\vspace{0.1in}
+
+{\bf {\color{red} Cea's Lemma}: Bounds solution error by interpolation error on the FE space} 
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+
+\noindent {\bf DRM:nonlinear}
+
+\begin{itemize}
+
+\item Very expressive (potential high accuracy for a small number of degrees of freedom)
+\item Self adaptive
+\item Equivariant
+\item Don't need a complex mesh data structure
+\item Don't work on saddle-point problems (eg. most problems)
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}{Start of a convergence theory for PINNS}
+
+
+[Shin, Darbon and Kaniardarkis, 2020], [Jiao, Lai, Lo, Wang, Yang]
+
+\begin{itemize}
+\item PINN error is a combination of approximation error and training/optimization error
+\item Show that a PINN (depth $L$ width $W$) can be constructed with low approximation error which reduces as the complexity of the PINN increases. 
+\item Hope that the optimization error can be reduced to acceptable levels. 
+\item Try things out on simple problems
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+
+{\bf BUT} 
+
+\begin{itemize}
+\item {\bf Non convex (no guarantee of uniqueness or convergence of training)}
+\item PINNs are nonlinear function approximators. {\color{red} No equivalent of Cea's lemma giving a bound on the solution error.}
+\item Solutions can sometimes have no connection to reality!
+\end{itemize}
+
+
+
+\end{frame}
+
+
+
+
+\begin{frame}{ReLU Neural Networks and approximation in 1D}
+
+
+{\color{blue} Convergence of a  PINN/DRM relies on understanding {\bf both} approximation and training}
+
+\vspace{0.1in}
+
+A feed-forward {\color{red}Deep Neural Network} (DNN) can be 'in principle' trained to approximate a target function $u(x)$ 
+
+\vspace{1mm}
+\begin{figure}
+    \centering
+    \includegraphics[scale = 0.2]{nn_1in.png}
+    \label{fig:dnn_example}
+\end{figure}
+
+$$ y_{j} = \Sigma_{i=0}^{W-1}  c_{i,j} \; \sigma(a_{i,j} y_{j} + b_{i,j} ) \; j = 1, \cdots , L \quad y_{0} \equiv x, \quad y(x) = y_L$$
+
+\end{frame}
+
+\begin{frame}{Expressivity}
+
+There are a {\color{red} lot of results} on the {\bf theoretical expressivity} of a DNN [Grohs and Kutyniok, Mathematical aspects of deep learning, (2022)]. 
+
+\vspace{0.2in}
+
+{\em 
+\noindent {\bf Universal approximation theorem, [Hornick et. al., 1989]} If $u({\mathbf x})$ is a {\em continuous function} with ${\mathbf x} \in K \subset R^d$ (compact), and $\sigma$ a continous activation function. Then for any $\epsilon > 0$ there exists a (shallow) neural network $y({\mathbf x},\theta)$ such that
+$$\|u({\mathbf x} )- y({\mathbf x}) \|_{\infty} < \epsilon.$$
+}
+
+
+\end{frame}
+\begin{frame}
+
+{\em 
+\noindent  {\bf Theorem  [Yarotsky (2017)]}
+
+Let $$F_{n,d} = \{ u \in W^{n,\infty}([0,1]^d): \|u\|_{W^{n,\infty}} \le 1 \}$$
+For any $d,n$ and $\epsilon \in (0,1)$ there is a ReLU network architecture that
+\begin{enumerate}
+\item Is capable of expressing any function from $F_{d,n}$ with error $\epsilon$
+\item Has depth 
+$$\mbox{depth:}  \quad L < c (\log(1/\epsilon) + 1) \quad \mbox{width:} \quad  W < c \epsilon^{-d/n} (\log(1/\epsilon) + 1)$$
+for some constant $c(d,n)$.
+\end{enumerate}
+}
+
+\vspace{0.1in}
+
+{\color{blue} Implies exponential rates of convergence with increasing depth $L$ }
+
+\vspace{0.2in}
+
+\noindent {\color{red} But how well do we do in practice?}
+
+\end{frame}
+
+
+\begin{frame}{Direct Learned Univariate Function Approximation}
+
+For a learned function $y(x)$ approximate target function $u(x)$ by minimising the 'usual' loss function $L$
+over parameters ${\mathbf \theta}$
+
+$$\min_{\mathbf \theta} \; L({\mathbf \theta}) \equiv \sum_{k=1}^M |y(X_k) - u(X_k)|^2$$
+
+Use the shallow ReLU network
+
+$$y(x) = \sum_{j=0}^{W-1} c_j (a_j x + b_j)_+, \quad {\mathbf \theta} = [{\mathbf a}, {\mathbf b}, {\mathbf c}].$$
+
+
+\vspace{0.1in}
+
+\begin{center}
+{\color{blue} Find the optimal set of coefficients $a,b,c$}
+\end{center} 
+
+\vspace{0.1in}
+
+Use an ADAM SGD (over the quadrature points) optimiser
+
+\end{frame}
+
+\begin{frame}{Approximation of: $u(x) = \sin(x)$ using ReLU network}
+
+Uniform quadrature points:
+
+
+    \begin{figure}
+    \centering
+    \includegraphics[scale = 0.2]{sine_knots_adapted.png}
+     \includegraphics[scale = 0.35]{loss_knots_adapted.png}
+    \end{figure}
+    
+    Results {\color{red} poor}. Depend crucially on the starting values. Even then poor.
+\end{frame}
+
+\begin{frame}{Approximation of: $u(x) = x^{2/3}$}
+
+Uniform quadrature points:
+
+
+    \begin{figure}
+    \centering
+    \includegraphics[scale = 0.2]{x_singular_knots_adapted.png}
+     \includegraphics[scale = 0.35]{loss_knots_adapted_1.png}
+    \end{figure}
+    
+    Results even worse! Depend crucially on the starting values. Even then very bad!
+\end{frame}
+
+\begin{frame}
+
+
+{\Large {Problems  with:}}
+
+\vspace{0.2in}
+
+\begin{itemize}
+
+ \item {\Large { {\color{red} the loss function, }}}
+
+\item {\Large { {\color{red} training,}}} 
+
+\item {\Large { {\color{red}and conditioning,} }}
+
+\end{itemize}
+
+\vspace{0.2in}
+
+{\Large {of the ReLU NN.}}
+
+\end{frame}
+
+\begin{frame}
+
+{\color{red}  REASON:} Trying to train $a_i,b_i,c_i$ together, whereas they play very different role in the approximation. 
+
+\vspace{0.1in}
+
+This leads to a {\color{red} very non-convex and ill conditioned optimisation problem}
+
+\vspace{0.2in}
+
+{\color{red}  RESOLUTION:} 
+
+\begin{itemize}
+
+\item {\bf First} solve the {\em nonlinear} problem of finding nearly optimal (knots) $a_i,b_i$ first 
+\item {\bf Then} Solve the {\em nearly linear but ill-conditioned} problem of finding the (weights) $c_i$ next by {\em {\color{red} {\bf pre-conditioning the system}}}
+\item {\bf Iterate} if needed (it's not needed)
+
+
+\end{itemize}
+
+
+This method uses a lot of finite element theory to work and delivers good approximations. But much work needed to make it work for PINNS in general.
+
+\end{frame}
+
+
+
+\begin{frame}{Poisson Problem on an L-shaped domain}
+
+\begin{figure}
+  \includegraphics[height=0.7\textheight]{oSlide4_mod.png}
+  \end{figure}
+
+\end{frame}
+
+\begin{frame}{Singular solution}
+\begin{itemize}
+\item Solution $u({\vec{x}})$ has a {\color{blue} gradient singularity at the interior corner} $A_i$
+
+\item  If the interior angle is $\omega$ and the distance from the corner is $r$ then
+$${\color{red} u(r,\theta) \sim r^{\alpha} f(\theta), \quad \alpha = \frac{\pi}{\omega}}$$
+where $f(\theta)$ is a {\color{blue} regular function of $\theta$}
+
+\item Corner problem
+{\color {purple}$$ u(r,\theta) \sim r^{2/3}, \quad r \to 0.$$}
+
+
+
+\end{itemize}
+\end{frame}
+
+
+\begin{frame}{Numerical results: {\bf random} quadrature points}
+
+Solve $\Delta u(x) = 0 \;  \text{on} \; \Omega_{L} \quad u(r,\theta) = r^{2/3}sin(2\theta/3) \; \text{on} \; \Gamma = \partial \Omega_{L} $
+
+\begin{figure}[ht!]
+\centering
+\includegraphics[scale=0.32]{DGMsol_coll_random.png}
+\includegraphics[scale=0.32]{DRMsol_coll_random.png}
+
+\caption{Left:  PINN                Right: DRM}
+\end{figure}
+
+
+\begin{center} {\color{blue} Can we improve the accuracy by a better choice of collocation/quadrature points?}   \end{center}
+
+\end{frame}
+
+
+%%%
+
+%\begin{frame}{OT Based r-adaptivity}
+
+%Can do r-adaptivity to find the {\color{red} optimal collocation points} $X_k$ in $\mathbb{R}^n$ using {\color{blue}Optimal Transport (OT)}
+
+%\vspace{0.1in}
+
+%{\bf Idea} Think of interpolation error  $m$ as a {\em measure}, and minimise {\bf Wasserstein distance}
+%$$\min_{\vec{\bf{X}}} \int |\vec{\bf{X}} - \vec{\xi}|^2 d \mu $$
+
+%Such that 
+
+%$$ m(\vec{\bf{X}},t) |d \vec{\bf{X}}| = \theta |d \vec{\xi}|.$$
+
+%Find $\vec{\bf{X}}$
+
+%\begin{itemize} 
+
+%\item {\color {orange}Directly} eg. Using the Sinkhorn algorithm
+%\item {\color {purple} Indirectly} eg. Solving a Monge-Amp\'ere equation [B], [PICANNS, Singh et. al. 21]
+%\end{itemize}
+%\end{frame}
+
+
+
+%%%
+
+
+%%%
+
+
+%%%
+%%%
+
+
+\begin{frame}{Optimal collocation points  for the L-shaped domain}
+ \begin{figure}
+  \includegraphics[height=0.7\textheight]{collocation_points-OT-L-shaped.png}
+   \caption{Optimal points for interpolating {\color{red} $u(r,\theta) \sim r^{2/3}$}}
+  \end{figure}
+
+\end{frame}
+
+%%%
+
+
+
+
+%%%
+
+\begin{frame}{Optimal points and PINN/Deep Ritz}
+    
+    Solutions with Optimal quadrature points 
+
+\begin{figure}
+\centering
+    \includegraphics[scale = 0.32]{DGMsol_coll_OT.png}
+    \includegraphics[scale = 0.32]{DRMsol_coll_OT.png}
+    \caption{$L^{2}$ error - randomly sampled points: 0.468 $|$ Optimal: {\color{blue} 0.0639}}
+    \label{fig:DRM_comparison}
+\end{figure}
+
+Left: PINN, Right: Deep Ritz
+\begin{center}
+    {\color {purple} Good choice of quadrature points makes a big difference, but still problems with pre-conditioning}
+\end{center}
+\end{frame}
+
+
+\begin{frame}{Operator based methods such as FNO}
+
+{\bf Idea:}  Have an evolutionary PDE defined for $x \in \Omega$
+{\color{blue} $$u_t = F(x,t,u,u_x,u_xx),  \quad u(0,x) \equiv u_0(x) \in H^1(\Omega).$$}
+If $u_1(x) \equiv u(1,x)$ this {\em can} induce a {\color{blue} {\em map} } $N: H^1(\Omega) \to H^1(\Omega)$
+$$N: u_0  \equiv u_1.$$
+
+\vspace{0.1in}
+
+\begin{itemize}
+\item If $F$ is {\color{blue} linear} then so is $N$. Otherwise {\color{red} nonlinear}
+\item If $F$ is {\color{blue} Lipschitz} then $N$ is {\color{blue} continuous.}  Otherwise properites of $N$ are {\color{red} unclear} and it may not even exist!
+\item If $u$ satisfies  a {\color{blue} conservation law} then so does $N$.
+\end{itemize}
+
+\vspace{0.1in}
+
+
+{\bf Neural operator} methods try to learn the map $N$. Most literature is for the linear, Lipschitz case.
+ 
+\end{frame}
+
+\begin{frame}{Supervised Learning}
+
+
+\begin{itemize}
+
+\item Have a Neural Net with input (a discretised form of) $u_0(x)$ and output $\Psi(u_0)$  (a discretised approximation of) $u_1(x)$ and parametrised by $\theta$.
+
+
+\item Using your {\color{blue} favourite PDE solver} (eg. pseudo-spectral method, FE etc.) generate lots of input-output pairs
+$(u_{0,i}(x),u_{1,i})(x)$ for $i=0 \ldots N$ which you hope span a relevant subset of the (infinite dimensional) function space $H^1(\Omega)$.
+
+\item Construct a loss function eg.
+{\color{blue} $$L = \| u_{1,i} - \Psi(u_{0,i}) \|.$$}
+
+\item {\color{blue} Optimize $\theta$} to minimize the loss over the training set using SGD/Adam. Validate in the usual way
+
+\item Can then apply the {\color{red} Neural Operator} NN to find $u_1$ for {\em arbitrary} initial data without having to solve the PDE.  eg. Weather forecasting
+
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+
+{\bf Notes} 
+
+\begin{itemize}
+
+\item Many different architectures for NN. Many make use of latent {\color{blue} finite dimensional} structures. Examples include {\color{blue} DeepONet and FNO. }
+
+
+\item This is {\color{blue} supervised learning of the operator} as we are generating the pairs in advance. {\color{red} It differs significantly from the semi-supervised training of a PINN.}
+
+\item Quality of the NN depends significantly on the quality of the training set. 
+
+\item Various theorems exist on the convergence/accuracy of the Neural operator. They rely on properties of $N$ which depend in a very subtle way on the properties of the underlying PDE. See [Kovachi et. al.]
+
+\end{itemize}
+
+
+\end{frame}
+
+
+\begin{frame}{Example}
+
+Simplest example is the {\color{blue} linear heat equation}
+
+$$u_t = u_{xx}, \quad x \in \Omega.$$
+
+Then have if $\Omega = R$
+
+$$N: u_0 \to  u_1 \equiv G* u_0 \equiv \frac{1}{\sqrt{2 \pi t}} \int_{-\infty}^{\infty} e^{-(x-y)^2/t} u_0(y) \; dy.$$
+
+\vspace{0.1in}
+
+Also if $u$ satisfies {\color{blue} {\em periodic boundary conditions}} $x \in [0,2\pi]$  
+$$N : u_0(x) \equiv \sum_{n} a_n \; e^{i n x} \to  u_1(x) \equiv \sum_{n} e^{-n^2} \; a_n \; e^{i n x} .$$
+
+\vspace{0.1in}
+
+So the linear map $N$ is defined in terms of {\color{blue} integral operators} and {\color{blue} simple spectral operations. }
+
+\end{frame}
+
+
+
+\begin{frame}{The FNO}
+The {\color{purple} FNO architecture} is based on the process of solving the linear heat equation:
+
+$$\Psi(u,\theta)_{FNO} \equiv Q \circ {\cal L}_L \circ \ldots \circ {\cal L}_2 \circ {\cal L}_1 \circ R(u).$$
+$${\cal L}_n(v)(x,\theta) = \sigma(W_n v(x) + b_n + K(v))$$
+
+\vspace{0.1in}
+
+Here $W$ is a {\color{blue} pointwise linear local map}.  $K(v)$ is a {\color{blue} global integral operator}, kernal $G_n(\theta)$.  Evaluate $Kv$ using an {\color{blue} FFT} via
+$$FFT(Kv) = FFT(G_n) \; FFT(v).$$
+
+\vspace{0.1in}
+
+
+FFT restricted to $M$ modes. Nonlinearity and {\color{blue} higher order modes}  introduced via the {\color{blue} activation function} $\sigma$.
+
+\end{frame}
+
+\begin{frame}{Figure from FNO paper}
+    \begin{figure}
+    \centering
+     \includegraphics[scale = 0.4]{ccaa.pdf}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Examples:}
+
+
+
+{\bf 2D Allen-Cahn equation modeling phase separation:}
+
+{\color{blue}
+\begin{equation}
+\begin{aligned}
+    u_t &= u - u^3 + \epsilon^2\Delta u, && \mathbf{x}\in[0,1]^2, t\in(0,T)\\
+    u(0,\mathbf{x}) &= u_0(\mathbf{x}), && \mathbf{x}\in[0,1]^2
+\end{aligned}
+\end{equation}
+}
+
+\vspace{0.2in}
+
+{\bf Navier-Stokes eqns (vorticity formulation)}
+
+{\color{blue}
+\begin{equation}
+    \begin{aligned}
+    \omega_t &= - u\cdot\omega_x - v\cdot\omega_y + \nu\Delta\omega + f, && \mathbf{x}\in[0,1]^2, t\in(0,T)\\
+    \omega &= v_x - u_y, \quad w(0,\mathbf{x}) = w_0(\mathbf{x}), && \mathbf{x}\in[0,1]^2,
+\end{aligned}
+\end{equation}
+
+}
+
+\end{frame}
+
+
+\begin{frame}{Results 1}
+
+Predictions of FNO trained on different datasets for the Allen-Cahn equation ($\epsilon = 0.05$). (a) inputs with noise (b) 1000 data pairs (c) 10000 data pairs (d) 1000 data pairs + 1000 generated data pairs (e) 5000 data pairs + 5000 generated data pairs (f) ground truth {\color{blue} [with Chaoyu Liu]}
+    \begin{figure}
+    \centering
+     \includegraphics[scale = 0.3]{ca.pdf}
+    \end{figure}
+\end{frame}
+
+\begin{frame}{Results 2}
+
+
+{\color{blue} Test error of neural operators on PDE datasets with 1000 and 10000 training samples.}
+\begin{table}[htbp]
+\centering
+\vskip 0.15in
+\label{table:results-combined}
+\resizebox{0.8\textwidth}{!}{
+\begin{sc}
+\begin{tabular}{llcccc}
+\textbf{PDE Dataset}            & \textbf{Training Samples} & \textbf{FNO} & \textbf{UNO} & \textbf{CNO} & \textbf{UNet-FNO} \\ 
+\\
+\multirow{2}{*}{Darcy Flow}      & 1000                     & 3.157e-2     & 3.141e-2     & 2.295e-2     & \textbf{1.312e-2} \\ 
+                                 & 10000                    & 1.686e-2     & 1.770e-2     & 1.034e-2     & \textbf{7.142e-3} \\ 
+\\
+\multirow{2}{*}{Navier-Stokes ($\nu =1e-3$)} & 1000                     & 7.940e-3     & 7.775e-3     & 1.090e-2     & \textbf{4.250e-3} \\ 
+                                 & 10000                    & 2.626e-3     & 1.937e-3     & 2.016e-3     & \textbf{1.204e-3} \\ 
+\\
+\multirow{2}{*}{Navier-Stokes ($\nu =1e-4$)} & 1000                     & 9.410e-2     & 9.282e-2     & 6.701e-2     & \textbf{4.135e-2} \\ 
+                                 & 10000                    & 5.271e-2      & 5.617e-2     & 2.036e-2     & \textbf{1.570e-2} \\ \midrule
+\\
+\multirow{2}{*}{Allen-Cahn ($\epsilon=0.05$)} & 1000                     & 1.376e-2     & 1.646e-2     & 2.980e-2     & \textbf{5.008e-3} \\ 
+                                 & 10000                    & 2.945e-3     & 2.967e-3     & 1.321e-2     & \textbf{2.060e-3} \\ \midrule
+\\
+\multirow{2}{*}{Allen-Cahn ($\epsilon=0.01$)} & 1000                     & 1.050e-2     & 1.511e-2     & 1.910e-2     & \textbf{3.347e-3} \\ 
+                                 & 10000                    & 7.098e-3     & 1.173e-2     & 9.981e-3     & \textbf{1.135e-3} \\ \midrule
+\\
+\multirow{2}{*}{Compressible Navier-Stokes} & 1000                     & 2.740e-1     & 2.846e-1     & 5.644e-1     & \textbf{2.355e-1} \\ 
+                                 & 10000                    & 2.330e-1     & 2.089e-1     & 2.911e-1     & \textbf{1.640e-1} \\ \bottomrule
+\end{tabular}
+\end{sc}
+}
+\end{table}
+
+\end{frame}
+
+
+
+\begin{frame}
+
+{\bf Areas for improvement and research} 
+
+\vspace{0.2in}
+
+
+\begin{itemize}
+
+\item NONE of this applies, for example, to the {\color{red} nonlinear} heat equation
+$$u_t = u_{xx} + u^2.$$
+
+\item Observe poor conservation laws at the moment
+
+\item Generating a {\color{blue} good training set} is crucial and can be {\color{red} slow}. How to make it good and fast?
+
+\item FNO struggles away from the traning set. Need to broaden its scope and extend the theorems on its convergence
+
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}{Summary}
+
+  \begin{itemize}
+ \item PINNS and NOs both show promise as a quick way of solving PDEs but have only really been tested on quite simple problems so far
+\item PINS not (yet) competitive with FE in like-for-like comparisons
+\item PINNs need careful meta-parameter tuning to work well
+\item NOs proving more promising. Now used for weather forecasting!
+\item Long way to go before we understand PINNS or NOs completey and have a satisfactory convergence theory for them in the general case. 
+\item Lots of great stuff to do!
+  \end{itemize}
+\end{frame}
+
+\end{document}
